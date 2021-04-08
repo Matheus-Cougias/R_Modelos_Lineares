@@ -1,0 +1,148 @@
+---
+title: "Aula 12"
+author: "Matheus Cougias"
+date: "20/03/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Mínimos Quadrados Ponderados
+
+## Gerando o banco de dados
+Alguns problemas não podem ser considerados lineares, ou seja, uma regressão linear não consegue compreender de forma certeira os dados apresentados.
+```{r gerandoDados01}
+ n  <- 150
+ x  <- seq(0, 2*pi, length=n)
+ fx <- sin(x)
+ y  <- fx + rnorm(n, sd=0.2)
+ dados <- data.frame(y=y, x=x)
+ plot(y ~ x, dados, pch=19, col="blue", cex=0.5)
+ lines(fx ~ x, lty=2, col="red", lwd=2)
+ SQT <- sum( (y - mean(y))^2 )
+
+```
+
+## Ajuste utilizando minimos quadrados ponderados
+
+```{r MinimosQuadradosPonderados}
+
+ x0     <- 4.5
+ lambda <- 0.1
+ pesos  <- exp( - ( (dados$x - x0)/lambda )^2 )
+ pesos  <- pesos/sum(pesos)
+ 
+ X <- as.matrix( cbind(1, dados$x) )
+ Y <- as.matrix(dados$y)
+ 
+ plot(pesos ~ x); abline(v=x0, col="red", lwd=2, lty=2)
+ 
+ # Ajuste do modelo "local"
+ W    <- diag(pesos)
+ beta <- solve(t(X)%*%W%*%X)%*%t(X)%*%W%*%Y
+ 
+ plot(y ~ x, dados, pch=19, col="blue", cex=0.5)
+ abline(v=x0, col="red", lwd=2, lty=2)
+ abline(a=beta[1], b=beta[2], lty=2, col="black")
+ yhat <- matrix(c(1,x0), ncol=2)%*%beta
+ points(yhat ~ x0, pch=15, col="red")
+ 
+```
+
+## Ajuste final
+```{r}
+
+ plot(y ~ x, dados, pch=19, col="blue", cex=0.5)
+ lambda <- 0.5
+ X <- as.matrix( cbind(1, dados$x) )
+ Y <- as.matrix(dados$y)
+
+ for(x in seq(0, 2*pi, length=100)){
+     x0    <- x
+     pesos <- exp( - ( (dados$x - x0)/lambda )^2 )
+     pesos  <- pesos/sum(pesos)
+     
+     # Ajuste do modelo "local"
+     W    <- diag(pesos)
+     beta <- solve(t(X)%*%W%*%X)%*%t(X)%*%W%*%Y
+     abline(a=beta[1], b=beta[2], lty=2, col="light grey")
+     yhat <- matrix(c(1,x0), ncol=2)%*%beta
+     points(yhat ~ x0, pch=15, col="red")
+ }
+
+```
+
+## Minimos Quadrados Nao Lineares
+
+## Gerando o banco de dados
+```{r gerandoDados01}
+
+ n  <- 100
+ x  <- seq(0, 2, length=n)
+ fx <- 1.5 * exp( 1.5 * x )
+ y  <- fx + rnorm(n, sd=1)
+ dados <- data.frame(y=y, x=x)
+ plot(y ~ x, dados, pch=19, col="blue", cex=0.5)
+ lines(fx ~ x, lty=2, col="red", lwd=2)
+ SQT <- sum( (y - mean(y))^2 )
+
+```
+
+## Solucao do Modelo Log-Linear
+```{r ModeloLogLinear}
+
+ plot(y ~ x, dados, pch=19, col="blue", cex=0.5, log="y")
+ modelo <- lm(log(y) ~ x, data=dados)
+ summary(modelo)
+ lines(exp(predict(modelo)) ~ x, lty=2, col="red")
+```
+
+## Algoritmo de Minimos Quadrados Nao Lineares
+```{r MQNaoLinear}
+
+ beta   <- matrix( c(exp(coef(modelo)[1]), coef(modelo)[2]) )
+ Y      <- as.matrix(dados$y)
+ 
+ # Condicao inicial
+ beta <- as.matrix(c(mean(Y), 0))
+
+ 
+ for(iter in 1:10){
+         
+   dBeta0 <- exp(beta[2]*dados$x)
+   dBeta1 <- beta[1]*exp(beta[2]*dados$x)*dados$x
+ 
+   J <- as.matrix( cbind(dBeta0, dBeta1) )
+   f <- beta[1]*exp(beta[2]*dados$x)
+   Z <- Y - f + J%*%beta
+ 
+   New.beta <- solve(t(J)%*%J)%*%t(J)%*%Z
+   cbind(beta, New.beta)
+   beta     <- New.beta
+   
+ }
+ 
+ # Estimativa do sigma^2
+ sigma2 <- sum( (Y - f)^2 )/(length(Y) - 2)
+ 
+ # Estimativa do desvio padrao dos coeficientes
+ sqrt( diag( sigma2 * solve(t(J)%*%J) ) )
+ 
+ # - - - - - - - - - - - - - - - - - - - - -
+ # Minimos Quadrados Nao Lineares no R
+ dados  <- data.frame(y=y, x=x)
+ modelo <- nls( y ~ b0*exp(b1*x), data=dados,
+                start=list(b0=mean(y), b1=0))
+ summary(modelo)
+ (beta)
+ 
+ confint(modelo) # Intervalo de confianca
+
+```
+
+
+
+
+

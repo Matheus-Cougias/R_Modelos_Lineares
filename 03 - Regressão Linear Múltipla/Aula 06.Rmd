@@ -1,0 +1,94 @@
+---
+title: "Aula 06"
+author: "Matheus Cougias"
+date: "04/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Leitura}
+dados <- read.csv2("aneel_2014-2016.csv")
+for(i in 1:61){
+  if (dados$ralta[i] == 0){
+    dados$ralta[i] <- 1
+  }
+}
+```
+
+##Modelo utilizando lm
+Inicialmente vamos somente procurar a regressão realizada entre as variáveis PMSOaj e cons, então chegamos ao Intercept 2.623e+04 (com erro de 1.686e+04) e ao B1 2.447e-01 (com erro de 7.802e-03)
+```{r Modelo}
+modelo <- lm(PMSOaj ~ cons, data = dados)
+summary(modelo)
+```
+
+
+##Nomenclatura matricial
+Dessa vez, ao invés de trabalharmos com as variáveis diretamente, trabalharemos com elas em forma matricial. Essa forma matricial facilita bastante o cálculo da regressão (ou seja, valores de beta) quando buscamos a relação entre diversas variáveis. Nesse caso, a variável de interesse para estudo é a PMSOaj, então seus valores são repassados para o vetor Y, vetor com 1 coluna e 61 linhas. No caso das demais variáveis, como necessitamos o parâmetro base B0, podemos simplismente na coluna referente ao B0 na matriz X, colocar os valores como 1. Basicamente, a própria base de dados já possuímos os vetores Y e X, faltando calcular o vetor Beta e o vetor de Erro. O valor tomado como cada um dos betas será aquele que minimize a soma do quadrado dos erros, que é dada por (Y-XB)^(T)(Y-XB), bastando então derivar essa equação em relação a beta. O resultado gera a equação B = (X^(T)X)^(-1)(X^(T)Y).
+
+Realizando a regressão em forma matricial, encontramos o vetor Beta = [2.62e+04, 2.35e-01], nesse caso, o B0 e B1 em ordem.
+
+Com os valores de Beta já calculados, podemos então realizar a predição de valores, basicamente multiplicando os vetores de X e de Beta.
+
+Outra propriedade interessante da regressão linear múltipla está na existência da matriz de projeçao, que basicamente é uma matriz que gera os valores de Ychapéu. Essa matriz também é bem aplicada para calcular os resíduos do modelo.
+```{r Matrizes}
+Y <- as.matrix(dados$PMSOaj)
+X <- matrix(c(rep(1,61), dados$cons), nrow=61)
+
+#(X^(T)X) = t(X)%*%X
+#(X^(T)X)^(-1) = solve(t(X)%*%X)
+Beta = solve(t(X)%*%X)%*%t(X)%*%Y
+
+I <- diag(rep(1,nrow(dados)))
+
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+
+Ychapeu <- H%*%Y
+
+res <- (I - H)%*%Y
+
+```
+
+
+
+##Propriedades dos estimadores
+Algumas das vezes também podemos buscar os valores de média, desvio padrão e covariância dos estimadores. Já conhecemos que a esperança de beta é o próprio beta, basta realizarmos o cálculo e entrar os resultados. O valor para Sigma^2 é basicamente a soma dos quadrados dos resíduos, enquanto a Covariância de nosso vetor beta é dada por CovBeta = (X^(T)X)^-1. Nesse caso, a matriz de covariância representa as seguintes infoemações:
+
+Variância(B0) = CovBeta[1,1] = 2.843645e+08
+
+Variância(B1) = CovBeta[2,2] = 6.087539e-05
+
+Covariância(B0,B1) = Correlação(B1,B0) = CovBeta[1,1] = CovBeta[2,2] = -7.801670e+01
+
+
+
+Então para calcularmos o desvio padrão dos estimadores basta então pegar as raízes da diagonal da matriz CovBeta, onde temos então:
+
+DesvioBeta(B0) = 1.686311e+04
+
+DesvioBeta(B1) = 7.802268e-03
+```{r}
+sigma2 <- t(res)%*%res/(nrow(dados) - nrow(Beta))
+
+CovBeta <- as.numeric(sigma2) * solve(t(X)%*%X)
+
+DesvioBeta <- sqrt(diag(CovBeta))
+```
+
+
+
+##Outros valores de interesse
+Para calcularmos os valores do desvio padrão da resposta estimada, basta trabalharmos sobre a matriz projeção, onde a raiz de cada um dos valores da diagonal representa o desvio relacionado com aquela amostra y. Então, para completar o banco de dados, podemos adicionar uma coluna de desvio.
+
+Outro valor que podemos encontrar está na covariância dos resíduos, dada por sigma²*(I-H). Uma informação interessante é de que caso os elementos fora das diagonais da matriz estejam zerados, os resíduos serão considerados como independentes. Caso os elementos da diagonal principal sejam iguais, significa que os resíduos são homocedáticos.
+
+```{r}
+DesvioRespostas <- sqrt(diag(H))
+
+dados$DesvioRespostas <- DesvioRespostas
+
+CovRes <- as.numeric(sigma2)*(I-H)
+```

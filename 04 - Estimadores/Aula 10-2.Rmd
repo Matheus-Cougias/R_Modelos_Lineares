@@ -1,0 +1,80 @@
+---
+title: "Aula 10.2"
+author: "Matheus Cougias"
+date: "28/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Leitura de dados
+```{r Leitura}
+require(openxlsx)
+dados <- read.csv2("aneel_2014-2016.csv")
+
+#Base com os dados transformados
+dt <- data.frame(logPMSO = log(dados$PMSOaj),
+                 logrsub = log(dados$rsub + 1),
+                 logrdist = log(dados$rdist_a + 1),
+                 logralta = log(dados$ralta + 1),
+                 logmponderado = log(dados$mponderado),
+                 logcons = log(dados$cons),
+                 logPNTaj = log(dados$PNTaj + 1),
+                 logCHIaj = log(dados$CHIaj + 1))
+```
+
+##Ajuste do modelo de regressão linear múltipla
+Como base de comparação utilizaremos a regressão linear múltipla já realizada anteriormente. Através da análise do VIF, podemos observar que temos uma base para afirmar que existe colinearidade nos dados, por exemplo, com 98% das informações do mponderado e de cons estando presente tambem nas demais variáreis. Dessa maneira, sabemos que se cortarmos o modelo, provavelmente as mesmas informações estarão contidas no resultado, então uma opção é melhorar esse ajuste de forma que as variáveis não sejam cortadas, mas sim que toda sua informação seja considerada para gerar o modelo final. Esse modelo até então possui uma capacidade preditiva de 96,59035%.
+```{r regressaoMultipla}
+require(car)
+
+modelo <- lm(logPMSO ~ logrsub + logrdist + logralta + logmponderado + logcons + logPNTaj + logCHIaj, data = dt)
+
+summary(modelo)
+vif(modelo)
+
+1 - 1/vif(modelo)
+
+
+
+#Capacidade preditiva
+Y <- as.matrix(dt$logPMSO)
+SQT <- sum((Y - mean(Y))^2)
+
+X <- model.matrix(modelo)
+
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+res <- Y - H%*%Y
+aux <- 1 - diag(H)
+res_del <- res/(1-diag(H))
+SQRes <- sum(res_del^2)
+(R2pred <- 1 - SQRes/SQT)
+```
+
+##Melhorando o R² preditivo
+
+```{r R2aneel}
+beta <- solve(t(X)%*%X)%*%t(X)%*%Y
+Identidade <- diag(c(0,rep(1, nrow(beta)-1)))
+
+
+R2predFun <- function(lmbd)
+{
+  Identidade <- diag(c(0,rep(1, nrow(beta)-1)))
+  beta <- solve(t(X)%*%X + lmbd*Identidade)%*%t(X)%*%Y
+  H <- X%*%solve(t(X)%*%X + lmbd*Identidade)%*%t(X)
+  res <- Y - H%*%Y
+  aux <- 1 - diag(H)
+  res_del <- res/(1-diag(H))
+  SQRes <- sum(res_del^2)
+  R2pred <- 1 - SQRes/SQT
+  return(R2pred)
+}
+
+saida <- optimize(R2predFun, lower=0.001, upper=2, maximum = TRUE)
+lambda <- saida$maximum
+(saida$objective)
+beta <- solve(t(X)%*%X + lambda*Identidade)%*%t(X)%*%Y
+```

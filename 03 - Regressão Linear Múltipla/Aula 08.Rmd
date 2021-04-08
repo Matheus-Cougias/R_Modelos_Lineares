@@ -1,0 +1,179 @@
+---
+title: "Aula 08"
+author: "Matheus Cougias"
+date: "09/02/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Introdução às tranformações de variáveis aleatórias
+Diversas transformações podem ser aplicadas em variáveis aleatórias para facilitar o seu estudo. Para estudo inicial, tomaremos uma amostra já padronizada em uma normal(0,1), com tamanho de 1000 coletas. Se observamos seu histograma, veremos uma normal correta. Podemos realizar algumas alterações a essa distribuição normal, por exemplo, se elevarmos seu valor ao quadrado, fazendo com que todos os valores negativos se tornem valores positivos. Essa modificação gera uma nova distribuição, mas dessa vez assimétrica, onde maior parte de seus valores estão nas faixas iniciais, que deacem rapidamente com o crescimento do valor de y, conhecida como DISTRIBUIÇÃO QUIQUADRADO com UM GRAU DE LIBERDADE. A partir de uma variável quiquadrada com um grau de liberdade, podemos gerar variáveis com mais graus através da soma de diversas variáveis normais (n variáveis gera n graus de liberdade). Podemos comparar a diferença dos gráficos de graus de liberdade ao compararmos o histograma de y e o de x. Uma característica interessante para as variáveis quiquadradas é que sua média normalmente estará em torno de n (número de variáveis somadas).
+outra característica interessante está na combinação entre duas variáveis quiquadradas, tomando duas variáveis aleatórias quiquadradas X²p e Y²n (p e n sendo seus graus de liberdade), se realizamos uma divisão (X²p/p)/(Y²n/n) = F(p,n), que gera a chamada distribuição F que possui dois parâmetros. Também temos, na soma entre duas variáveis, o grau de liberdade final será dado pela soma dos graus individuais das variáveis.
+
+```{r transformacoes}
+require(packHV)
+n <- 1000
+y <- rnorm(n)
+hist_boxplot(y)
+hist_boxplot(y^2)
+
+x <- rep(NA, n)
+for (cont in 1:n)
+{
+  x[cont] <- sum(rnorm(5)^2)
+}
+hist_boxplot(x)
+print(mean(x))
+```
+
+
+##Padronização de variáveis quadráticas sem dependência
+Em alguns dos casos, não podemos utilizar as propriedades da Normal pois estamos trabalhando com mais de uma variável simultaneamente. Utilizando um caso particular, onde não exista covariância entre as variáveis, a matriz de covariância seria zerada na diagonal segundária e teria os valores das variâncias de cada uma das variáveis em sua diagonal principal. Para esse caso, basta aplicarmos o seguinte cálculo: ((Y-Mi)^t)(MatCov^-1)(Y-Mi). Esse cálculo é realizado de forma bem básica, mas é complicado caso os elementos da diagonal (as covariâncias) passam a ser diferentes de zero.
+
+
+##Padronização de variáveis quadráticas com dependência
+Primeiramente criaremos variáveis normais multivariadas (com correlação) através do pacote mvtnorm. Criaremos duas bases de dados diferentes, uma com correlação entre as variáveis e outra sem essa correlação. Quanto maior for a correlação entre as variáveis, maior será o seu comportamento em formato de uma linha, dessa maneira, quanto maior for seu comportamento, melhor ela estará representada como uma elipse.
+
+```{r padronizaçãoDependencia}
+require(mvtnorm)
+dados <- rmvnorm(10000, mean=rep(0,2), sigma=diag(2))
+dados <- rmvnorm(10000, mean=rep(0,2), sigma=matrix(c(1.0, 0.8,
+                                                      0.8, 1.0), nrow = 2, byrow = TRUE))
+plot(dados[,1] ~ dados[,2], cex = 0.5)
+```
+
+
+##Criando intervalo de confiança assumindo a variância conhecida
+Tomando o modelo que ajustamos anteriormente, da regressão entre PMSOaj e cons, seu intercept foi de 2.623e+04 e seu ganho de acordo com cons é de 2.447e-01, onde seu intervalo de confiança é dado por [0.2290637, 0.2602883] (calcularo erroneamente). Temos um porém nesses resultados, que é a dependência entre os estimadores, ou seja, existe uma matriz de covariância completa para as variáveis. Se quisermos avaliar o intervalo de confiança tanto para B0 quanto para B1, simultaneamente, não consseguiremos calcular de maneira correta considerando que os dados são independentes. Dessa maneira, tentamos padronizar as variáveis através de:
+((Bhat - B)^t)[sigma²(XtX)^-1]^-1(Bhat - B).
+Para o exemplo, estamos estimando dois parâmetros diferentes (então temos uma quiquadrada com 2 graus de liberdade), podemos então utilizar o percentil para essa quiquadrada (de 95%) e delimitar então a região dos possíveis valores para essa probabilidade, utilizando agora a matriz de covariância. Nesse caso, a matriz de covariância nos mostra que as variáveis tem uma ligação positiva, ou seja, se uma aumenta, a outra também tente a aumentar seu valor. 
+
+Se percebemos bem na imagem gerada, existem quadro retas (que delimitam os possíveis valores para o intervalo de confiança), mas também existe uma elipse desenhada em vermelho. Na verdade, o real intervalo de confiança não é o retângulo formado pelas retas tracejadas, mas sim pelo contorno da parte da elipse que se encontra dentro desse retângulo. Assim, para avaliarmos a hipótese de um determinado dado estar ou não dentro do intervalo de confiança, basta analisarmos se, dentro do gráfico ele encontra-se ou não dentro da elipe e dentro do retângulo simultaneamente. Essa padronização nos gera um 
+Bhat ~ Normal(Beta; sigma²(XtX)-¹).
+```{r padronizaçãoDependencia2}
+dados <- read.csv2("aneel_2014-2016.csv")
+
+modelo <- lm(PMSOaj ~ cons, data = dados)
+X <- model.matrix(modelo)
+Y <- dados$PMSOaj
+XtX <- t(X)%*%X
+invXtX <- solve(XtX)
+summary(modelo)
+confint(modelo)
+sigma2 <- anova(modelo)["Residuals", "Mean Sq"]
+
+
+ngrid <- 200
+valor <- matrix(NA, nrow=ngrid, ncol=ngrid)
+b0hat <- 26230
+b1hat <- 0.2447
+b0 <- seq(b0hat - 3.0*16860, b0hat + 3.0*16860, length = ngrid)
+b1 <- seq(b1hat - 3.0*0.2447, b1hat + 3.0*0.2447, length = ngrid)
+for (c1 in 1:ngrid)
+{
+  for (c2 in 1:ngrid)
+  {
+    Beta <- as.matrix(c(b0[c1] - b0hat, b1[c2] - b1hat))
+    valor[c1,c2] <- t(Beta)%*%XtX%*%Beta/sigma2
+  }
+}
+image(x=b0, y=b1, z=valor, col=hcl.colors(15, "terrain"))
+points(x=b0hat, y=b1hat, pch=19, col="blue")
+contour(x=b0, y=b1, z=valor, levels = qchisq(p=0.95, df=2), add = TRUE, col = "red", lwd = 2)
+intervalo <- confint(modelo)
+abline(v=intervalo[1,], lty=2)
+abline(h=intervalo[2,], lty=2)
+```
+
+
+##Criando os intervalos de confiança através da variância desconhecida
+Nos cálculos acima, consideramos que já conhecíamos os valores para sigma² ao calculas os intervalos de confiança, mas se este valor for desconhecido, podemos utilizar algumas propriedades do vetor Beta para calcularmos o intervalo. Dessa maneira, temos que: 
+(((Bhat - B)t(XtX)(Bhat - B))/(p.sigma²))/(SQRes/(Sigma²(n-p))) = (X²p/p)/(X²n-p/n-p) = Fp,n-p. 
+```{r intervaloDesconhecido}
+ngrid <- 200
+valor <- matrix(NA, nrow=ngrid, ncol=ngrid)
+b0hat <- 26230
+b1hat <- 0.2447
+p <- 2
+n <- nrow(dados)
+b0 <- seq(b0hat - 3.0*16860, b0hat + 3.0*16860, length = ngrid)
+b1 <- seq(b1hat - 3.0*0.2447, b1hat + 3.0*0.2447, length = ngrid) 
+for (c1 in 1:ngrid)
+{
+  for (c2 in 1:ngrid)
+  {
+    Beta <- as.matrix(c(b0[c1] - b0hat, b1[c2] - b1hat))
+    valor[c1,c2] <- (t(Beta)%*%XtX%*%Beta/p)/sigma2
+  }
+}
+image(x=b0, y=b1, z=valor, col=hcl.colors(15, "terrain") )
+points(x=b0hat, y=b1hat, pch=19, col="blue")
+contour(x=b0, y=b1, z=valor, 
+         levels = qf(p=0.95, df1=p, df2=n-p),
+         add = TRUE, col = "red", lwd=2)
+ 
+intervalo <- confint(modelo)
+abline(v=intervalo[1,], lty=2)
+abline(h=intervalo[2,], lty=2)
+```
+
+
+##Colinearidade e multicolinearidade
+Nesse modelo trabalharemos com dados simulados, onde geramos uma amostra de 100 observações e, ao invés de analisarmos Bhat, através dos dados retiramos as variáveis x1 e x2, sendo variáveis teoricamente independentes pelo que podemos perceber no gráfico abaixo. Dessa maneira, criamos uma variável dependente das duas variáveis anteriores, que é a variável y, que também possui um componente que representa o ruído. Percebemos através da regressão que os valores se mantiveram bem próximos do esperado, onde B0 = 1.024, B1 = 0.444 e B2 = -0.479. A princípio, se observarmos os valores de Pr, todas as variáveis possuem significância estatística.
+```{r dadosSimulados1}
+n <- 100
+dados <- rmvnorm(n, mean=rep(0,2), sigma = matrix(c(1.0, 0.6,
+                                                    0.6, 1.0), nrow = 2, byrow = TRUE))
+x1 <- dados[,1]
+x2 <- dados[,2]
+plot(x1 ~x2)
+y <- 1 + 0.5*x1 - 0.5*x2 + rnorm(n, sd=0.2)
+modelo <- lm(y ~ x1 + x2)
+summary(modelo)
+```
+
+
+Agora testaremos o mesmo modelo, porém com uma correlação mais forte entre as variáveis (0.7). Podemos perceber que o valor de R² sofreu uma pequena baixa.
+```{r dadosSimulados2}
+n <- 100
+dados <- rmvnorm(n, mean=rep(0,2), sigma = matrix(c(1.0, 0.7,
+                                                    0.7, 1.0), nrow = 2, byrow = TRUE))
+x1 <- dados[,1]
+x2 <- dados[,2]
+plot(x1 ~x2)
+y <- 1 + 0.5*x1 - 0.5*x2 + rnorm(n, sd=0.2)
+modelo <- lm(y ~ x1 + x2)
+summary(modelo)
+```
+
+
+Um novo teste é realizado, tomando a correlação entre as variáveis como 0.9. Dessa maneira, ocorre um aumento significativo do valor da variância e uma grande diminuição do R². Os valores de Pr também sofrem um aumento considerável. Isso significa que as variáveis começaram a ser confundidas pelo programa, sem saber qual informação do modelo é advinda de cada variável.
+```{r dadosSimulados2}
+n <- 100
+dados <- rmvnorm(n, mean=rep(0,2), sigma = matrix(c(1.0, 0.9,
+                                                    0.9, 1.0), nrow = 2, byrow = TRUE))
+x1 <- dados[,1]
+x2 <- dados[,2]
+plot(x1 ~x2)
+y <- 1 + 0.5*x1 - 0.5*x2 + rnorm(n, sd=0.2)
+modelo <- lm(y ~ x1 + x2)
+summary(modelo)
+```
+
+
+Aumentando ainda mais a correlação, agora para 0.98, temos um grande crescimento do desvio padrão dos estimadores, o R² fica extremamente baixo, provando que, quanto maior a correlação entre as variáveis, mais complexo fica para o modelo interpretar suas informações. Outro fato interessante está na variação da coluna Pr, fazendo com que os dados sejam cada vez menos significativos ao utilizar ambas as variáveis.
+```{r dadosSimulados2}
+n <- 100
+dados <- rmvnorm(n, mean=rep(0,2), sigma = matrix(c(1.0, 0.98,
+                                                    0.98, 1.0), nrow = 2, byrow = TRUE))
+x1 <- dados[,1]
+x2 <- dados[,2]
+plot(x1 ~x2)
+y <- 1 + 0.5*x1 - 0.5*x2 + rnorm(n, sd=0.2)
+modelo <- lm(y ~ x1 + x2)
+summary(modelo)
+```
+

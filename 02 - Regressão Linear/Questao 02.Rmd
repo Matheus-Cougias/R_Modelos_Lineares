@@ -1,0 +1,44 @@
+---
+title: "Lista 04-05"
+author: "Matheus Cougias"
+date: "30/01/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Informação Importante
+Durante a leitura dos dados e transformação da coluna "ralta" em log(ralta) houve um erro, pois alguns valores da coluna apresentaram valor zero, dessa maneira, fiz a alteração desses valores para 1, corrigindo o erro gerado e não alterando significativamente a base de dados.
+```{r Leitura}
+dados <- read.csv2("aneel_2014-2016.csv")
+for(i in 1:61){
+  if (dados$ralta[i] == 0){
+    dados$ralta[i] <- 1
+  }
+}
+```
+
+#Modelo Log
+```{r Modelo Log}
+reg_multipla_log = lm(log(PMSOaj) ~ rsub + log(rdist_a) + log(ralta) + log(mponderado) + log(cons), data = dados)
+summary(reg_multipla_log)
+```
+
+#Modelo Boxcox
+```{r Modelo Boxcox}
+require(MASS)
+testePMSOaj <- boxcox(PMSOaj ~ rsub + log(rdist_a) + log(ralta) + log(mponderado) + log(cons), data = dados, lambda = seq(-1, +1, length = 20))
+lambda <- testePMSOaj$x[which.max(testePMSOaj$y)]
+dados$boxcoxPMSOaj <- (dados$PMSOaj^lambda - 1)/lambda
+reg_multipla_boxcox = lm(boxcoxPMSOaj ~ rsub + log(rdist_a) + log(ralta) + log(mponderado) + log(cons), data = dados)
+summary(reg_multipla_boxcox)
+```
+
+#Resultados
+O valor selecionado para o lambda durante a utilização do boxcox foi de 0.010101..., bem próximo do valor padrão para aplicar o logaritmo. A primeira comparação que pode ser feita é em relação aos valores de R² múltiplo e ajustado de cada um dos modelos. Os valores obtidos na regressão linear múltipla com a variável log(PMSOaj) foram de 97.6% e 97.38%, enquanto os valores obtidos na utilização do boxcox de PMSOaj foram de 97.58% e 97.36%, bem próximos também dos valores do logaritmo.
+
+Esses valores próximos são explicados devido ao lambda gerado durante o boxcox, de 0.01010101, bem próximo de 0, que seria considerado como a aplicação direta do logaritmo na variável. Dessa maneira, ambos os modelos possuem resuldados muito similares, podendo ambos serem utilizados.

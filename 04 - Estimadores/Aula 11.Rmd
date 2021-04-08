@@ -1,0 +1,160 @@
+---
+title: "Aula 11"
+author: "Matheus Cougias"
+date: "12/03/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Leitura dos dados
+```{r leituraDados}
+require(openxlsx)
+dados <- read.csv2("aneel_2014-2016.csv")
+
+# Criando uma nova base de dados transformados
+dt <- data.frame( logPMSO = log(dados$PMSOaj),
+                 rsub    = log(dados$rsub + 1), ## Testar depois
+                 rdist   = log(dados$rdist_a),
+                 ralta   = log(dados$ralta + 1),
+                 mponderado = log(dados$mponderado),
+                 cons  = log(dados$cons),
+                 PNTaj = log(dados$PNTaj + 1),
+                 CHIaj = log(dados$CHIaj + 1)  ) ## Testar depois
+```
+
+
+## Ajuste do Modelo de Regressao Linear Multipla
+```{r ajusteModelo}
+require(car)
+modelo <- lm(logPMSO ~ rsub + rdist + ralta +
+             mponderado + cons + PNTaj +
+             CHIaj, data=dt)
+
+summary(modelo)
+vif(modelo)
+ 
+1 - 1/vif(modelo)
+ 
+#modelo <- step(modelo, trace = FALSE)
+summary(modelo)
+ 
+# Capacidade preditiva
+Y <- as.matrix(dt$logPMSO)
+X <- model.matrix(modelo)
+ 
+SQT <- sum( (Y - mean(Y))^2 )
+ 
+H   <- X%*%solve(t(X)%*%X)%*%t(X)
+res <- Y - H%*%Y
+aux <- 1 - diag(H)
+res_del <- res/(1-diag(H))
+SQRes   <- sum( res_del^2 )
+(R2pred  <- 1 - SQRes/SQT)
+
+```
+
+# Melhorando a capacidade preditiva do modelo utilizando LASSo
+```{r R2ANEEL}
+invXtX   <- solve(t(X)%*%X)
+beta.hat <- invXtX%*%t(X)%*%Y
+c.max    <- sum( abs(beta.hat[-1]) )
+
+# Implementando "um algoritmo" para o lasso
+c.abs <- 0.90  # 0.87
+ 
+# 1o Passo do algoritmo
+C     <- matrix(sign(beta.hat), ncol=length(beta.hat))
+C[,1] <- 0 # Restricao nao se aplica ao beta_0
+D     <- as.matrix(c.abs)
+beta  <- beta.hat - invXtX%*%t(C)%*%solve(C%*%invXtX%*%t(C))%*%(C%*%beta.hat - D)
+ 
+apply(cbind(beta.hat[-1], beta[-1]), 2, function(x) sum(abs(x)))
+ 
+while( sum( abs(beta[-1]) ) - c.abs > 1e-3){
+  C     <- rbind(C, as.numeric(sign(beta)))
+  C[,1] <- 0 # Restricao nao se aplica ao beta_0
+  D     <- rbind(D, c.abs)
+  beta  <- beta.hat - invXtX%*%t(C)%*%solve(C%*%invXtX%*%t(C))%*%(C%*%beta.hat - D)
+ }
+ 
+apply(cbind(beta.hat[-1], beta[-1]), 2, function(x) sum(abs(x)))
+ 
+H <- X%*%invXtX%*%(t(X) - 
+    t(C)%*%solve(C%*%invXtX%*%t(C))%*%C%*%invXtX%*%t(X))
+ 
+yhat  <- X%*%beta
+res   <- Y - yhat
+press <- sum( (res/(1-diag(H)))^2 )
+ 
+(R2pred  <- 1 - press/SQT)
+ 
+cbind(beta.hat, beta)
+ 
+```
+# Encontrando o C ótimo
+```{r COtimo}
+invXtX   <- solve(t(X)%*%X)
+beta.hat <- invXtX%*%t(X)%*%Y
+c.max    <- sum( abs(beta.hat[-1]) )
+
+R2predFun2 <- function(c.abs)
+{
+  C <- matrix(sign(beta.hat), ncol=length(beta.hat))
+  C[,1] <- 0
+  D <- as.matrix(c.abs)
+  beta  <- beta.hat - invXtX%*%t(C)%*%solve(C%*%invXtX%*%t(C))%*%(C%*%beta.hat - D)
+  apply(cbind(beta.hat[-1], beta[-1]), 2, function(x) sum(abs(x)))
+
+  while( sum( abs(beta[-1]) ) - c.abs > 1e-3){
+    C     <- rbind(C, as.numeric(sign(beta)))
+    C[,1] <- 0 # Restricao nao se aplica ao beta_0
+    D     <- rbind(D, c.abs)
+    beta  <- beta.hat - invXtX%*%t(C)%*%solve(C%*%invXtX%*%t(C))%*%(C%*%beta.hat - D)
+    }
+
+  apply(cbind(beta.hat[-1], beta[-1]), 2, function(x) sum(abs(x)))
+ 
+  H <- X%*%invXtX%*%(t(X) - t(C)%*%solve(C%*%invXtX%*%t(C))%*%C%*%invXtX%*%t(X))
+ 
+  yhat  <- X%*%beta
+  res   <- Y - yhat
+  press <- sum( (res/(1-diag(H)))^2 )
+  R2pred  <- 1 - press/SQT
+}
+
+saida <- optimize(R2predFun2, lower=0.001, upper=c.max, maximum = TRUE)
+c.abs <- saida$maximum
+(saida$objective)
+```
+
+
+
+
+
+
+
+# Utilizando o pacote glmnet
+```{r}
+
+require(glmnet)
+
+# alpha = 0 for Ridge Regression
+modelo <- cv.glmnet(X[,-1], Y, nfolds=20, alpha=0)
+coef(modelo)
+modelo$lambda.min
+  
+# alpha =1 for LASSO
+modelo <- cv.glmnet(X[,-1], Y, nfolds=20, alpha=1)
+coef(modelo)  
+modelo$lambda.min
+  
+# usando elastic net alpha*Ridge + (1-alpha)*LASSO
+modelo <- cv.glmnet(X[,-1], Y, nfolds=20)
+coef(modelo)
+modelo$lambda.min
+
+```

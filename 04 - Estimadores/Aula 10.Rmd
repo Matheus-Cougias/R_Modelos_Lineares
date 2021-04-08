@@ -1,0 +1,223 @@
+---
+title: "Aula 10"
+author: "Matheus Cougias"
+date: "25/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Criando os dados
+Criando um exemplo simples, de 50 observações que geram dados de uma senóide, com um grid homogêneo e a função sendo esse seno e um ruído de desvio padrão 0,2.
+```{r dados}
+n <- 50
+x <- seq(0, 2*pi, length=n)
+y <- sin(x) + rnorm(n, sd=0.2)
+plot(y ~ x, pch=19, col="blue")
+```
+
+
+##Ajustando um polinômio com grau elevado
+Sobre os tipos possíveis de regressão, podemos realizar regressões polinomiais e escolhermos o grau que melhor se adequa aos dados. Nesse caso, ao utilizarmos o coeficiente 15, temos um polinômio dado por: Y = B0 + B1X + B2X² + B2X³ ... + B15X^15, como podemos observar através do summary da regressão. Pela análise do sumário, temos que os principais graus que interferem no resultado são:primeiro, terceiro e quinto grau. Dessa maneira, agora aprenderemos em como chegar ao resultado ótimo partindo apenas do modelo que já temos, ou seja, sem retirar nenhuma das variáveis do modelo. Como o modelo criado possui um ruído muito bem definido, podemos perceber que a regressão gerada segue bem mais essa distribuição de ruídos do que a senóide original, o que gera uma menor compreensão dos dados.
+```{r polinomio} 
+modelo <- lm(y ~ poly(x, degree = 15))
+summary(modelo)
+
+plot(y ~ x, pch = 19, col = "blue")
+lines(predict(modelo) ~ x, col = "red")
+
+X <- model.matrix(modelo)
+colnames(X) <- paste("x", 0:15, sep="")
+
+Y <- as.matrix(y)
+SQT <- sum((y - mean(Y))^2)
+```
+
+
+##Estimador Ridge Regression
+Esse tipo de ajuste pode ser feito de forma manual, trabalhando com as matrizes aprendidas anteriormente. Esse ajuste manual faz com que a soma dos quadrados dos valores de Beta seja limitada a uma determinada constante repassada pelo usuário. No exemplo da regressão inicial, o somatório foi de 24,11, então buscaremos gerar a regressão com a restrição:
+
+sum(Bi)^2 <= C
+
+Aplicando a tranformação de Lagrange, podemos repassar essa restrição para a função objetiva de minimização de beta, chegando ao novo estimador dado por:
+
+Beta = (XtX + lambda*I)-¹XtY
+
+Algumas propriedades do estimador podem ser calculadas, onde temos:
+
+E(Beta) = (XtX + lambda*I)-¹XtYBeta
+Var(Beta) = sigma²(XtX + lambdaI)-¹XtX(XtX + lambdaI)
+H(lambda) = X(XtX + lambdaI)-¹Xt
+
+
+```{r ridgeRegression}
+beta <- solve(t(X)%*%X)%*%t(X)%*%Y
+
+plot(y ~ x, pch=19, col="blue")
+lines(X%*%beta ~ x, col="red")
+
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+res <- Y - H%*%Y
+SQres <- sum(res^2)
+(R2 <- 1 - SQres/SQT)
+
+aux <- 1 - diag(H)
+res/aux
+
+res_del <- res/(1-diag(H))
+SQRes <- sum(res_del^2)
+(R2pred <- 1 - SQRes/SQT)
+```
+
+
+##Estimador Ridge
+Assim, manipulamos o nosso problema utilizando lamda, na procura pelo melhor valor dos erros. Ao testarmos o valor de lambda zerado, podemos perceber que encontramos o mesmo valor do R² preditivo do modelo anterior, onde não tinhamos a utilização do lambda, então sendo negativo.
+```{r estimador0}
+lambda <- 0
+Identidade <- diag(rep(1, nrow(beta)))
+beta <- solve(t(X)%*%X + lambda*Identidade)%*%t(X)%*%Y
+
+H <- X%*%solve(t(X)%*%X + lambda*Identidade)%*%t(X)
+res <- Y - H%*%Y
+aux <- 1 - diag(H)
+res_del <- res/(1-diag(H))
+SQRes <- sum(res_del^2)
+(R2pred <- 1 - SQRes/SQT)
+
+yhat <- H%*%Y
+plot( y ~ x, pch=19, col="blue")
+lines(yhat ~ x, col="red")
+```
+Ao alterarmos o valor de lambda para 5, podemos perceber a alteração de diversos coeficientes Beta, o que gera a modificação do R² preditivo para um valor positivo.
+```{r estimador5}
+lambda <- 5
+Identidade <- diag(rep(1, nrow(beta)))
+beta <- solve(t(X)%*%X + lambda*Identidade)%*%t(X)%*%Y
+
+H <- X%*%solve(t(X)%*%X + lambda*Identidade)%*%t(X)
+res <- Y - H%*%Y
+aux <- 1 - diag(H)
+res_del <- res/(1-diag(H))
+SQRes <- sum(res_del^2)
+(R2pred <- 1 - SQRes/SQT)
+
+yhat <- H%*%Y
+plot( y ~ x, pch=19, col="blue")
+lines(yhat ~ x, col="red")
+```
+Alterando novamente o valor de lambda, mas agora para 10, podemos perceber que essa alteração positiva faz com que o R² preditivo sofra uma queda considerável. Isso gera a ideia de que quanto maior for esse valor de lambda, menos preciso será o modelo.
+```{r estimador10}
+lambda <- 10
+Identidade <- diag(rep(1, nrow(beta)))
+beta <- solve(t(X)%*%X + lambda*Identidade)%*%t(X)%*%Y
+
+H <- X%*%solve(t(X)%*%X + lambda*Identidade)%*%t(X)
+res <- Y - H%*%Y
+aux <- 1 - diag(H)
+res_del <- res/(1-diag(H))
+SQRes <- sum(res_del^2)
+(R2pred <- 1 - SQRes/SQT)
+
+yhat <- H%*%Y
+plot( y ~ x, pch=19, col="blue")
+lines(yhat ~ x, col="red")
+```
+Uma pequena alteração em relação ao problema original gera uma grande modificação em relação ao R² preditivo original. Alterando o lambda em somente 0.1 faz com que seu valor saia de negativo para positivo rapidamente.
+```{r estimador0.1}
+lambda <- 0.1
+Identidade <- diag(rep(1, nrow(beta)))
+beta <- solve(t(X)%*%X + lambda*Identidade)%*%t(X)%*%Y
+
+H <- X%*%solve(t(X)%*%X + lambda*Identidade)%*%t(X)
+res <- Y - H%*%Y
+aux <- 1 - diag(H)
+res_del <- res/(1-diag(H))
+SQRes <- sum(res_del^2)
+(R2pred <- 1 - SQRes/SQT)
+
+yhat <- H%*%Y
+plot( y ~ x, pch=19, col="blue")
+lines(yhat ~ x, col="red")
+```
+Alterando em mais 0.1, agora com labda chegando em 0.2, faz com que a capacidade preditiva do modelo caia, comprovando a ideia de que, quanto maior for esse valor de lambda, menor será a precisão do modelo.
+```{r estimador0.2}
+lambda <- 0.2
+Identidade <- diag(rep(1, nrow(beta)))
+beta <- solve(t(X)%*%X + lambda*Identidade)%*%t(X)%*%Y
+
+H <- X%*%solve(t(X)%*%X + lambda*Identidade)%*%t(X)
+res <- Y - H%*%Y
+aux <- 1 - diag(H)
+res_del <- res/(1-diag(H))
+SQRes <- sum(res_del^2)
+(R2pred <- 1 - SQRes/SQT)
+
+yhat <- H%*%Y
+plot( y ~ x, pch=19, col="blue")
+lines(yhat ~ x, col="red")
+```
+
+Como a média dos resultados deveria convergir para a média do valor de Y, temos de adicionar uma nova informação na restrição, a de que B0 (que justamente, representa essa média de Y), não esteja contida na restrição do estimador de Ridge. Ao retirarmos o B0 e garantindo que o modelo básico foi preservado no novo modelo, observamos um ganho importante em relação ao modelo que retém o coeficiente.
+
+```{r estimador0.1SemB0}
+lambda <- 0.1
+Identidade <- diag(c(0,rep(1, nrow(beta)-1)))
+beta <- solve(t(X)%*%X + lambda*Identidade)%*%t(X)%*%Y
+
+H <- X%*%solve(t(X)%*%X + lambda*Identidade)%*%t(X)
+res <- Y - H%*%Y
+aux <- 1 - diag(H)
+res_del <- res/(1-diag(H))
+SQRes <- sum(res_del^2)
+(R2pred <- 1 - SQRes/SQT)
+
+yhat <- H%*%Y
+plot( y ~ x, pch=19, col="blue")
+lines(yhat ~ x, col="red")
+```
+
+##Encontrando o lambda ótimo
+Dessa maneira, o que buscamos ao final do processo é conseguir o valor ótimo para lambda. Já é conhecido que os valores de R² preditivo tendem a ser melhores quando lamba está próximo de 0.1, então basta criar um loop para que testemos diversos valores para o intervalo entre 0 e algo em torno de 0.15.
+```{r testeLambda}
+lambda.seq <- seq(0.001, 0.15, length=20)
+vet.R2 <- 0*lambda.seq
+
+for (cont in 1:length(lambda.seq))
+{
+  lambda <- lambda.seq[cont]
+  Identidade <- diag(c(0,rep(1, nrow(beta)-1)))
+  beta <- solve(t(X)%*%X + lambda*Identidade)%*%t(X)%*%Y
+  
+  H <- X%*%solve(t(X)%*%X + lambda*Identidade)%*%t(X)
+  res <- Y - H%*%Y
+  aux <- 1 - diag(H)
+  res_del <- res/(1-diag(H))
+  SQRes <- sum(res_del^2)
+  
+  R2pred <- 1 - SQRes/SQT
+  vet.R2[cont] <- R2pred
+}
+
+plot(vet.R2 ~ lambda.seq, pch=19, col="red")
+
+```
+
+Outra opção interessante está na montagem de uma função de otimização, que buscará, através da otimização, calcular o melhor valor possível para lambda. Primeiramente fazemos com que a toda a função de cálculo de R² seja encapsulada em uma função geral, o que faz com que, caso queiramos calcular o valor de R2, basta chamar a função e então colocar o valor de entrada. Para otimizá-la, chamamos a função optimize(), escolhemos os valores de lower bound e upper bound, e também se a função busca a minimização ou maximização. Nesse caso, ao procurar o valor máximo da função, temos o valor ótimo de lambda para 0,07652788, que gerou um R² preditivo de 87.99937%.
+```{r otimizacaoLambda}
+R2predFun <- function(lmbd)
+{
+  Identidade <- diag(c(0,rep(1, nrow(beta)-1)))
+  beta <- solve(t(X)%*%X + lmbd*Identidade)%*%t(X)%*%Y
+  H <- X%*%solve(t(X)%*%X + lmbd*Identidade)%*%t(X)
+  res <- Y - H%*%Y
+  aux <- 1 - diag(H)
+  res_del <- res/(1-diag(H))
+  SQRes <- sum(res_del^2)
+  R2pred <- 1 - SQRes/SQT
+  return(R2pred)
+}
+
+optimize(R2predFun, lower=0.001, upper=2, maximum = TRUE)
+```

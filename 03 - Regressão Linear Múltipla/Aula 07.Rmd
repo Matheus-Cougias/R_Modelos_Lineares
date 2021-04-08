@@ -1,0 +1,120 @@
+---
+title: "Aula 07"
+author: "Matheus Cougias"
+date: "05/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+##Parte inical
+Então já conhecendo o método utilizado para gerar uma regressão linear múltipla, vamos então realizar um estudo para analisar os resultados gerados, por exemplo, buscando se um determinado ponto pode ou não ser considerado como discrepante. Esse tipo de estudo é realizado através da análise dos resíduos (que é a diferença entre o valor observado e o valor estimado pela reta de regressão, que é a distância entre os pontos e a reta). 
+```{r Leitura}
+dados <- read.csv2("aneel_2014-2016.csv")
+for(i in 1:61){
+  if (dados$ralta[i] == 0){
+    dados$ralta[i] <- 1
+  }
+}
+
+modelo <- lm(PMSOaj ~ cons, data = dados)
+summary(modelo)
+
+plot(PMSOaj ~ cons, data = dados, pch = 19, col = "blue")
+abline(modelo, lwd = 2, lty = 2, col = "red")
+
+PMSOaj <- dados$PMSOaj
+cons <- dados$cons
+dadosResultados <- data.frame(PMSOaj, cons)
+```
+
+
+##Trabalhando com os resíduos
+Então, como dito anteriormente, o resíduo nada mais é que a diferença entre o valor de cons e o valor esperado pela reta de regressão.
+
+```{r Residuos}
+residuo <- dados$PMSOaj - predict(modelo)
+#ou então podemos usar:
+residuo <- residuals(modelo)
+```
+
+
+##Resíduos padronizados
+Recordando o que foi abordado na aula 6, teremos algumas matrizes pré montadas nessa aula.Então, já conhecendo os residuos antigos, buscamos agora padronizá-los de modo que retiremos o seu desvio (ou seja, o sigma), de modo que eles sigam uma distribuição normal. A primeira opção de padronização (resíduo clássico) não é a mais segura de ser utilizada, pois os resíduos não são homocedásticos.
+
+Uma outra forma de calcular os resíduos é utilizar a variância específica de cada um dos resíduos para padronizar, divindo ele pela raiz quadrada de sua variância. Essa variância é calculada a partir dos valores da diagonal da matriz projeção. Se compararmos os valores dos resíduos na tabela de Resultados, os valores foram levemente alterados, que pode ser comprovado através da plotagem do gráfico (se fossem valores iguais, os pontos deveriam estar todos em uma linha reta).
+
+```{r Matrizes}
+Y <- as.matrix(dados$PMSOaj)
+X <- model.matrix(modelo)
+Beta = solve(t(X)%*%X)%*%t(X)%*%Y
+I <- diag(rep(1,nrow(dados)))
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+
+res <- (Y - H%*%Y)
+dadosResultados$Residuos <- res
+
+sigma2 <- t(res)%*%res/(length(Y) - ncol(X))
+sigma <- as.numeric(sqrt(sigma2))
+
+residuosPadronizados01 <- res/sigma
+dadosResultados$Padronizados01 <- residuosPadronizados01
+
+residuosPadronizados02 <- res/sqrt(sigma2*diag(I - H))
+dadosResultados$Padronizados02 <- residuosPadronizados02
+
+plot(Padronizados02 ~ Padronizados01, data = dadosResultados)
+```
+
+
+##Residuos Deletados
+Esse método é um tipo de processo de validação cruzada, calculando a diferença entre um valor observado e o valor estimado para um modelo que não considere aquele determinado valor. Novamente, se compararmos os valores estimados para o banco de dados com o valor observado e o banco sem o valor observado, teremos uma leve alteração dos resultados. Temos duas formas diferentes de calcular esses resíduos. Esses resíduos deletados geram duas possibilidades de uso, uma delas conhecida como PRESS, que é a soma dos quadrados preditivos, que é a soma dos quadrados dos resíduos preditivos. Outro valor interessante para calcularmos é o conhecido R² preditivo, que é a soma dos quadrados da regressão dividido pela soma dos quadrados totais (que pode ser dada pela soma dos quadradaos da regressão a a soma dos quadrados dos resíduos)
+```{r}
+#Primeira forma de calcular
+for (cont in 1:nrow(dados))
+{
+  modelo <- lm(PMSOaj ~ cons, data = dados[-cont,])
+  dadosResultados$resDeletado[cont] <- dados$PMSOaj[cont] - predict(modelo, newdata=dados[cont,])
+}
+
+#Segunda forma de calcular
+dadosResultados$resDeletado <- dadosResultados$Residuos/as.numeric(diag(I-H))
+
+#Press
+press <- sum(dadosResultados$resDeletado)
+
+#R² preditivo
+SQT <- sum((dadosResultados$PMSOaj - mean(dadosResultados$PMSOaj))^2)
+R2Pred <- 1 - press/SQT
+```
+
+
+##Efeito da inclusão de novas variáveis
+Inicialmente geramos uma variável aleatória que representará uma nova variável para o problema, acrescentando ela à matrix X de variáveis. Como podemos observar, se acrescentarmos uma nova variável ao modelo (que segue uma distribuição normal), seu valor de R² tende a melhorar, pois os dados serão mais compatíveis com uma regressão linear.
+```{r Inclusao}
+modelo1 <- lm(PMSOaj ~ cons, data = dados)
+print(summary(modelo1))
+Y <- as.matrix(dados$PMSOaj)
+X <- model.matrix(modelo)
+saida <- c()
+R2adj <- c()
+
+for (cont in 1:5)
+{
+  new.x <- rnorm(nrow(dados))
+  X <- cbind(X, new.x)
+  modelo1 <- lm(Y ~ -1 + X)
+  print(summary(modelo1))
+  
+  saida <- c(saida, sum(residuals(modelo)^2)/(length(Y)-ncol(X)))
+  
+  QMRes <- sum(residuals(modelo)^2)/(length(Y)-ncol(X))
+  R2adj <- c(R2adj, 1 - QMRes / (SQT/(length(Y)-1)))
+}
+print(saida)
+print(R2adj)
+
+```

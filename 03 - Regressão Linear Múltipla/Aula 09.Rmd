@@ -1,0 +1,211 @@
+---
+title: "Aula 09"
+author: "Matheus Cougias"
+date: "15/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Leitura de dados
+```{r leitura}
+dados <- read.csv2("aneel_2014-2016.csv")
+summary(dados)
+```
+
+##Histogramas
+Os histogramas são úteis para um estudo inicial da relação entre a variável PMSOaj e as demais variáveis preditoras. Podems analizar uma simetria em praticamente todos os histogramas, com uma maior quantidade de dados nas faixas inicial do histograma. Esse fato gera uma ideia de que, talvez, seja preciso normalizar a variável PMSOaj, porém esse ponto ainda deve ser investigado mais a fundo para sabermos se é ou não verdadeiro.
+```{r histograma, fig.width=10, fig.height=10}
+require(packHV)
+par(mfrow=c(3,3))
+for (cont in 4:11)
+{
+  hist_boxplot(dados[,cont], main = names(dados)[cont],
+               col = "light blue", xlab = names(dados)[cont])
+}
+```
+
+##Análise de correlação
+Um segundo e interessante passo para estudo das variáveis é realizar a comparação par a par entre a variável PMSOaj e as demais variáveis do problema. Nesse momento é interessante realizar a mudança nas variáveis e perceber se vale ou não a pena utilizarmos elas de sua forma padrão ou então realizarmos alguma alteraçao nelas.
+
+Buscamos encontrar a distribuição que siga de maneira mais fiel a uma reta de regressão linear, onde os dados sejam distribuídos homogeneamente sobre essa reta. Como pode-se observar, não existe essa homogeneidade na distribuição dos dados, onde há uma concentração maior de dados nos valores inicias do gráfico e, quando progredimos em relação ao eixo X, os valores ficam cada vez mais dispersos. Esse dado pode ser justificado devido à diferença dos portes das empresas presentes na base de dados, onde temos desde pequeno até grande porte, que faz com que os valores sofram com uma grande alteração de empresa para empresa.
+
+Até o momento, a única maneira que temos de trabalhar com a heterocedasticidade é aplicarmos uma variação nos valores do eixo Y. Essa alteração no eixo Y induz uma não linearidade ao problema, como podemos observar na segunda sessão de gráficos. Todos os gráficos seguem uma certa curvatura.
+
+Ao combinarmos a ideia de heterocedasticidade dos dados, além da assimetria dos histogramas gerados anteriormente, é factível a ideia de aplicarmos um logaritmo tanto no eixo Y quanto no eixo X. Como algumas colunas da base de dados possuem valores zerados, é necessário realizar uma pequena alteração, fazendo com que o logaritmo aplicado seja sobre seu valor + 1, já que não existe logaritmo de zero. Em alguns gráficos é evidente o benefício gerado pela transformação logaritmica, enquanto em outras ainda temos uma certa "dúvida" em relação a ser ou não aplicável.
+```{r dispersao, fig.width=10, fig.height=10}
+par(mfrow=c(3,3))
+for (var in names(dados)[5:11])
+{
+  equacao <- as.formula(paste("PMSOaj", var, sep = " ~ "))
+  plot(equacao, pch = 19, col = "blue", data = dados)
+}
+
+par(mfrow=c(3,3))
+for (var in names(dados)[5:11])
+{
+  equacao <- as.formula(paste("PMSOaj", var, sep = " ~ "))
+  plot(equacao, pch = 19, col = "blue", data = dados, log = "y", ylab = "log(PMSOaj)")
+}
+
+dev.new()
+par(mfrow=c(3,3))
+plot(log(PMSOaj) ~ log(rsub+1), pch = 19, col = "blue", data = dados)
+plot(log(PMSOaj) ~ log(rdist_a), pch = 19, col = "blue", data = dados)
+plot(log(PMSOaj) ~ log(ralta+1), pch = 19, col = "blue", data = dados)
+plot(log(PMSOaj) ~ log(mponderado), pch = 19, col = "blue", data = dados)
+plot(log(PMSOaj) ~ log(cons), pch = 19, col = "blue", data = dados)
+plot(log(PMSOaj) ~ log(PNTaj+1), pch = 19, col = "blue", data = dados)
+plot(log(PMSOaj) ~ log(CHIaj+1), pch = 19, col = "blue", data = dados)
+
+```
+
+
+##Análise de correlação
+Outra opção interessante para estudarmos os dados é através da análise de correlação. Essa correlação pode ser avaliada tanto pela matriz gerada, ou então de forma mais didática pelo gráfico de correlação. O gráfico consiste em dois métocos, onde podemos observar tanto a cor quanto o formato das elipses geradas. Quanto mais esticada, ou mais forte for a cor da elipse, maior serra a correlação entre as duas variáveis. Em relação à variável de estudo do problema, todas as variáveis possuem uma correlação positiva em relação a ela, ou seja, com o aumento de cada variável esperamos aumentar também o valor de PMSOaj. Um exemplo de alta correlação entre variáveis está entre o mponderado e o cons, onde logicamente, se temos alto número de consumidores, a quantidade de energia entregada deve ser alta também. 
+```{r correlacao}
+require(corrplot)
+matCor <- cor(dados[4:11], method = c("pearson", "spearman")[1])
+corrplot(matCor, method = "ellipse", type = "upper", order = "AOE", diag = FALSE, addgrid.col = NA, outline = TRUE)
+```
+
+
+## Criando uma nova base de dados *transformados*
+Dessa maneira, criamos uma nova base de dados, aplicando o logaritmo em todos os dados, lembrando que algumas variáveis ainda não foram definidas se utilizaremos em logaritmo ou não.
+```{r BaseDadosTransformada}
+ dt <- data.frame( logPMSO = log(dados$PMSOaj),
+                   rsub    = log(dados$rsub + 1), ## Testar depois
+                   rdist   = log(dados$rdist_a),
+                   ralta   = log(dados$ralta + 1),
+                   mponderado = log(dados$mponderado),
+                   cons  = log(dados$cons),
+                   PNTaj = log(dados$PNTaj + 1),
+                   CHIaj = log(dados$CHIaj + 1)  ) ## Testar depois
+
+```
+
+
+##Ajuste de modelos lineares univariados
+Podemos ajustar modelos lineares simples e analisarmos cada uma das componentes do problema. Ao analisarmos esse ajuste, percebemos que a variável cons é a que melhor compreende os dados de PMSO, seguida de mponderado e rdist_a. Entre as três, se fosse para escolher 2 variáveis, as selecionadas seriam cons (devido seu maior R²) e rdist_a (pois existe uma colinearidade muito forte entre cons e mponderado, o que significa que eles carregam informações bem similares). 
+```{r analiseUnivariada}
+require(exploreR)
+saida <- masslm(dt, dv.var = "logPMSO")
+saida <- saida[order(saida$R.squared, decreasing = TRUE),]
+names(saida)[1] <- "variavel"
+knitr::kable(saida, row.names = FALSE)
+```
+
+
+
+## Ajuste do Modelo de Regressao Linear Multipla
+Buscando compreender melhor a evidência da existência da colinearidade e seus prováveis motivos, ajustamos um modelo com todas as possíveis variáveis. Se compararmos os resultados gerados pelas regressões univariadas e a regressão múltipla, há uma grande diferença entre os p-valores apresentados. Na primeira, todos eram zerados, dando a ideia de que conseguiam compreender de maneira bem efetiva os dados, porém ao analisarmos uma regressão com todas as variáveis simultaneamente, percebemos que há um crescimento considerável dos p-valores, onde os únicos dois que possuem significado estatístico é cons e mponderado. Existe também uma alteração dos coeficientes preditivos, onde tanto rsub quanto CHIaj se tornaram negativo ao aplicarmos a regressão múltipla. Em relação ao R², percebemos um leve crescimento em relação à análise univariada utilizando a variável cons, o que agrega ainda mais a ideia de que existem diversas variáveis que carregam informações similares.
+```{r ajusteModelo}
+ modelo <- lm(logPMSO ~ rsub + rdist + ralta +
+                 mponderado + cons + PNTaj +
+                 CHIaj, data=dt)
+
+ summary(modelo)
+
+```
+
+
+## Diagnostico de Multicolinearidade - Estatistica VIF
+Para analisar a multicolinearidade, Variance Inflation Factor, onde os valores encontrados acima de 5 (ou 10), indicam que existe uma forte multicolineridade nos dados. No modelo anterior, encontramos um alto valor de VIF para: rdist, mponderado e cons. Como no exemplo abaixo, vemos que o VIF é basicamente um ajuste de modelo linear, onde a variável investigada é escrita como variável independente, e tenta-se explicar ela através do valor das demais variáveis preditoras. Assim, podemos ver que o mponderado pode ser escrito como uma combinação de algumas outras variáveis e que 98.47% de seus valores conseguem ser explicados por essas variáveis. Esses valores de VIF nos mostram que existem variáveis que podem ser retiradas do modelo e  que não farão tanta diferença pro resultado.
+```{r VIF}
+require(car)
+vif(modelo)
+
+# O que é o VIF
+modelo2 <- lm(mponderado ~ rsub + rdist + ralta + cons +
+                PNTaj + CHIaj, data=dt)
+summary(modelo2)
+
+1 - 1/vif(modelo)
+```
+
+
+##Ajuste de multicolinearidade
+Dessa maneira, analismos os p-valores das variáveis, retirando aquelas que possuem o maior valor, pois representa uma variável que não possui certa significância para o problema. Realizando esse passo manualmente, a primeira variável que retiramos é o rsub, onde seu p-valor era de 0.7966. Após sua retirada, o maior p-valor dado está na variável CHIaj, de 0.6707, retirando ela do modelo. Na terceira iteração, retiramos então a variável rdist, com seu p-valor de 0.32589. No quarto passo podemos retirar a variável PNTaj, que possui um p-valor de 0.145791. Ao utilizarmos o limite de p-valor abaixo de 0.05, podemos retirar então a variável ralta, chegando a um modelo final com somente as variáveis mponderado e cons. Caso fosse interessante, poderíamos ainda retirar a variável mponderado, que está um pouco acimad e 0,05. 
+
+Uma forma alternativa de realizarmos o corte de variáveis é através do step, onde o próprio modelo decidirá quais variáveis serão mantidas e quais serão cortadas da regressão. Esse método de step não segue a lógica da retirada da variável de maior p-valor, 
+```{r ajusteMulticolinearidade}
+#Passo 1
+#modelo <- lm(logPMSO ~ rsub + rdist + ralta +
+#               mponderado + cons + PNTaj +
+#               CHIaj, data=dt)
+#summary(modelo)
+
+#Passo 2
+#modelo <- lm(logPMSO ~ rdist + ralta +
+#               mponderado + cons + PNTaj +
+#               CHIaj, data=dt)
+#summary(modelo)
+
+#Passo 3
+#modelo <- lm(logPMSO ~ rdist + ralta +
+#               mponderado + cons + PNTaj, data=dt)
+#summary(modelo)
+
+#Passo 4
+#modelo <- lm(logPMSO ~ ralta +
+#               mponderado + cons, data=dt)
+#summary(modelo)
+
+#Passo 5
+#modelo <- lm(logPMSO ~ mponderado + cons, data=dt)
+#summary(modelo)
+
+#Modelo Automático
+modelo2 <- lm(logPMSO ~ rsub + rdist + ralta +
+               mponderado + cons + PNTaj +
+               CHIaj, data=dt)
+summary(modelo)
+
+modelo <- step(modelo2)
+summary(modelo)
+```
+
+
+## Avaliar o coeficiente de determinacao preditivo
+Para avaliar o R² preditivo, vamos partir do modelo final sugerido pelo método step. Utilizaremos a teoria para calcular esse R² preditivo, encontrando a matriz H relacionada à matriz X (de variáveis preditoras), calculamos os resíduos do modelo para que possam ser encontrados os resíduos deletados. Assim, podemos encontrar o R² preditivo através da divisão entre a soma dos quadrados dos resíduos e a soma dos quadrados totais. 
+
+Ao utilizarmos o modelo com a variável PNTaj, encontramos um R² preditivo de 96,98821%. Por outro lado, se retirarmos essa variável, o R² preditivo passa a ser 97,10918%, melhor que o resultado anterior.
+```{r R2pred}
+#Modelo com PNTaj
+modelo <- lm(logPMSO ~ ralta + mponderado + cons + PNTaj, data=dt)
+summary(modelo)
+1 - 1/vif(modelo)
+ 
+X <- model.matrix(modelo)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+resDel <- residuals(modelo)/(1-diag(H))
+SQT    <- sum( (dt$logPMSO - mean(dt$logPMSO))^2 )
+SQRes  <- sum(resDel^2)
+(R2Pred <- 1 - SQRes/SQT)
+
+#Modelo sem PNTaj
+modelo <- lm(logPMSO ~ ralta + mponderado + cons, data=dt)
+summary(modelo)
+1 - 1/vif(modelo)
+ 
+X <- model.matrix(modelo)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+resDel <- residuals(modelo)/(1-diag(H))
+SQT    <- sum( (dt$logPMSO - mean(dt$logPMSO))^2 )
+SQRes  <- sum(resDel^2)
+(R2Pred <- 1 - SQRes/SQT)
+
+## O calculo acima eh equivalente ao codigo computacional
+## mostrado a seguir
+yhat <- rep(NA, nrow(dt))
+for(cont in 1:nrow(dt)){
+  modelo <- lm(logPMSO ~ ralta + mponderado + cons, data=dt[-cont,])
+  yhat[cont]   <- predict(modelo, newdata=dt[cont,])
+}
+
+resDel <- dt$logPMSO - yhat
+SQRes  <- sum(resDel^2)
+(R2Pred <- 1 - SQRes/SQT)
+```

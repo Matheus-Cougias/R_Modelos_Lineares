@@ -1,0 +1,73 @@
+---
+title: "Lista 08"
+author: "Matheus Cougias"
+date: "15/02/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r leitura}
+dados <- read.delim("boston_corrected.txt")
+dados <- subset(dados, select = -c(OBS., TOWN, TOWN., TRACT, LON, LAT, CMEDV))
+dadosLog <- data.frame(logMEDV=log(dados$MEDV),logCRIM=log(dados$CRIM),logZN=log(dados$ZN+1),logINDUS=log(dados$INDUS),logCHAS=log(dados$CHAS+1),logNOX=log(dados$NOX),logRM=log(dados$RM),
+                       logAGE=log(dados$AGE),logDIS=log(dados$DIS),logRAD=log(dados$RAD),logTAX=log(dados$TAX),logPTRATIO=log(dados$PTRATIO),logB=log(dados$B),logLSTAT=log(dados$LSTAT))
+```
+**Análise inicial**
+Na análise dos histogramas, é possível identificar que as variáveis, em sua maioria, não seguem uma distribuição normal. Em relação aos gráficos de dispersão, foi identificado que algumas variáveis seguem valores fixados. Já, no gráfico de correlação existe uma forte correlação entre as variáveis TAX e RAD, além da variável DIS com INDUS, NOX e AGE.
+```{r analiseHistograma, fig.width=6, fig.height=6}
+require(packHV)
+par(mfrow=c(4,4))
+for (cont in 1:14)
+{
+  hist_boxplot(dados[,cont], main = names(dados)[cont],
+               col = "light blue")
+}
+par(mfrow=c(4,4))
+for (var in names(dadosLog)[2:14])
+{
+  equacao <- as.formula(paste("logMEDV", var, sep = " ~ "))
+  plot(equacao, pch = 19, col = "blue", cex = 0.1, data = dadosLog)
+}
+require(corrplot)
+corMat <- cor(dadosLog)
+corrplot(corMat, method = "ellipse", type = "upper", order = "AOE", diag=FALSE, addgrid.col=NA, outline=TRUE)
+```
+**Ajuste do Modelo de Regressao Linear Multipla**
+Para definir então qual base de dados será utilizada na regressão final, realizei duas regressões distintas para avaliar a aplicação do logaritmo. Ao aplicar a regressão linear múltipla com todas as variáveis da base, o modelo onde o logaritmo foi utilizad apresentou R² de 76,96%, resultado levemente superior ao modelo original, que teve o R² de 74,06%. Dessa maneira, decidi utilizar a base de dados com a transformação logaritmica.
+```{r ajusteModelo}
+modeloLog <- lm(logMEDV ~ logCRIM + logZN + logINDUS + logCHAS + logNOX + logRM + logAGE + logDIS + logRAD +
+                  logTAX + logPTRATIO + logB + logLSTAT, data=dadosLog)
+summary(modeloLog)
+```
+**Diagnostico de Multicolinearidade - Estatistica VIF**
+Com o logaritmo escolhido, através da análise do VIF percebe-se que as variáveis CRIM, NOX e DIS são as que possuem maior colinearidade, ou seja, carregam informações que podem ser explicadas pelas demais variáveis do modelo.
+```{r analiseVIF}
+require(car)
+1 - 1/vif(modeloLog)
+```
+**Ajuste de multicolinearidade**
+```{r ajusteMulticolinearidade, fig.width=8, fig.height=4, results = FALSE}
+modeloLog <- lm(logMEDV ~ logCRIM+logZN+logINDUS+logCHAS+logNOX+logRM+logAGE+logDIS+logRAD+logTAX+logPTRATIO+logB+logLSTAT,data=dadosLog)
+modeloFinalLog <- step(modeloLog)
+```
+**Análise do coeficiente de determinacao preditivo**
+Através do método step, algumas variáveis puderam ser retiradas do modelo, de forma que o modelo final apresentou um R² de 76,95%, o que não pode ser classificado como um resultado realmente satisfatório. Pode-se perceber que o modelo não compreendeu bem os dados através da visualização do gráfico Normal Q-Q, onde existem diversos pontos fora da reta normal. Por ultimo, busca-se analisar o coefiente de determinaçao preditivo, ou seja, quanto o modelo consegue prever futuras observações. O valor de R² preditivo encontrado foi de 75,48%.
+```{r analisePredicao}
+summary(modeloFinalLog)
+par(mfrow=c(2,2))
+plot(modeloFinalLog)
+modeloLog <- lm(logMEDV ~ logCRIM + logZN + logCHAS + logNOX + logRM + logAGE + logDIS + logRAD +
+                  logTAX + logPTRATIO + logB + logLSTAT, data=dadosLog)
+X <- model.matrix(modeloLog)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+resDel <- residuals(modeloLog)/(1-diag(H))
+SQT    <- sum( (dadosLog$logMEDV - mean(dadosLog$logMEDV))^2 )
+SQRes  <- sum(resDel^2)
+(R2Pred <- 1 - SQRes/SQT)
+```
+**Críticas e sugestões ao modelo final**
+O modelo final encontrado foi o seguinte: logMEDV ~ logCRIM + logZN + logCHAS + logNOX + logRM + logAGE + logDIS + logRAD + logTAX + logPTRATIO + logB + logLSTAT
+
+Como descrito durante a resolução do problema, não foi fácil a identificação entre utilizar ou não a transformação logaritmica na base de dados, então baseei minha decisão em um modelo inicial montado para cada caso. Provavelmente, pelos p-valores de quase todas as variáveis serem muito baixos, o modelo encontra uma certa dificuldade de cortar variáveis sem que o R² seja afetado. Dessa maneira, uma possibilidade de melhora nos resultados está na utilização de outra transformação que não seja o logaritmo. Outra opção está na utilização de regressões não lineares, que podem compreender de forma melhor os dados.

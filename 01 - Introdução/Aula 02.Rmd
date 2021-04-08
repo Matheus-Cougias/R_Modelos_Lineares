@@ -1,0 +1,85 @@
+---
+title: "Aula 02"
+author: "Matheus Cougias"
+date: "16/12/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r Gera_Dados}
+"Gera os valores aleatórios para a destribuição y, no caso escolhida como uma normal com média 1.7 e desvio padrão 0.2. Essa geração de valores mostra que  os pontos do modelo estarão centrados no valor 1.7, mas que 68% poderão variar em até 0.2 pra cima ou para baixo desse valor médio. Através do histograma fica clara a visualização da distribuição."
+y <- rnorm(50, mean=1.7, sd=0.2)
+
+hist(y)
+abline(v=1.7, col="red", lwd=2)
+```
+
+
+```{r Esperanca}
+"Dessa maneira, já tendo um conjunto de dados montados, podemos então trabalhar sobre esses valores. Como demonstrado, sabemos que a Esperança dos dados é igual a 1.7, porém caso esse valor não seja conhecido, a solução é utilizar um estimador para o parâmetro, onde
+Mi = Média (valor diferente da média real de 1.7)"
+
+Mi = mean(y)
+print(Mi)
+```
+
+
+```{r Variancia}
+"Para estimar a Variância, que sabemos ser igual a 2*SD = 0.4, temos dois modelos de estimar, uma através de S e outra para o valor de Sigma. "
+
+S2 = sum((y-mean(y))^2)/(length(y)-1)
+Sigma2 = sum((y-mean(y))^2)/(length(y))
+print(S2)
+print(Sigma2)
+
+"Como ambos os estimadores retornaram valores aproximados, basta então calcular o vício de cada um deles. Esse cálculo é feito gerando diversos novos conjuntos e então calcular para cada um deles a sua variância utilizando uma repetição. Para avaliar os resultados gerados pela repetição, é feita uma síntese dos conjuntos e então essa síntese é analisada."
+
+opcaoS2 <- c()
+opcaoSigma2 <- c()
+
+for(cont in 1:10000)
+{
+  y <- rnorm(50, mean=1.7, sd=0.2)
+  S2 = sum((y-mean(y))^2)/(length(y)-1)
+  Sigma2 = sum((y-mean(y))^2)/(length(y))
+  opcaoS2 <- c(opcaoS2, S2)
+  opcaoSigma2 <- c(opcaoSigma2, Sigma2)
+  
+}
+
+summary(opcaoS2)
+summary(opcaoSigma2)
+
+" Então, ao analisar o resultado (principalmente a média dos conjuntos), podemos perceber que o melhor estimador a ser usado para calcular a variância é o S², fato que pode ser comprovado através do teste de vício da variância. Temos os seguintes vícios para eles:"
+
+vicioS2 = 0.04
+vicioSigma2 = 0.04*(length(y)-1)/(length(y))
+print(vicioSigma2)
+
+"Então quanto buscamos estimar a variância para amostras muito pequenas, é preferível utilizar o estimador S² do que o Sigma² por causa do seu menor vício."
+```
+
+
+```{r Verossimilhança}
+"Sabendo que as amostras do problema vieram de uma distribuição normal com a média de 1.7 e desvio padrão 0.2, podemos calcular então a densidade de probabilidade do Y assumir qualquer valor. Dessa maneira, para calcular a máxima verossimilhança basta tratar dessa equação como uma maximização, calculando qual a probabilidade de conseguir um determinado conjunto de valores (vetores) ao seguir aquela distribuição dada (somatório das probabilidades P[Y1=y1] x P[Y2=y2] x ... x P[Yn=yn]).
+
+Ao transformar esse produto temos uma derivação em relação aos parâmetros desconhecidos, possibilitando assim encontrar os valores tanto de Mi quanto de Sigma². Dessa maneira, assuminos que um dos valores já é conhecido e então otimizamos para o outro parâmetro"
+
+n <- 30
+y <- rnorm(n, mean = 1.7, sd= 0.2)
+b <- seq(1, 3, by=0.01)
+
+s <- 0.15
+llk <- unlist(lapply(b, function(x) sum(dnorm(y, x, sd=s, log=TRUE))))
+print(llk ~ b, type="l", col="red", lwd=2)
+b[which.max(llk)]
+print(max(llk))
+
+
+```

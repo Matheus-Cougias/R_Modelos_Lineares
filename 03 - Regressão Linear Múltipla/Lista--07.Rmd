@@ -1,0 +1,33 @@
+---
+title: "ListA 07"
+author: "Matheus Cougias"
+date: "09/02/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Para P12 = 0
+```{r grafico1, fig.height=7, fig.width=7}
+require(mvtnorm)
+dados <- rmvnorm(10000, mean=rep(0,2), sigma=matrix(c(1.0, 0,
+                                                      0, 1.0), nrow = 2, byrow = TRUE))
+plot(dados[,1] ~ dados[,2], cex = 0.5, pch = 19)
+```
+
+##Para P12 = 0.8
+```{r grafico2, fig.height=7, fig.width=7}
+dados <- rmvnorm(10000, mean=rep(0,2), sigma=matrix(c(1.0, 0.8,
+                                                      0.8, 1.0), nrow = 2, byrow = TRUE))
+plot(dados[,1] ~ dados[,2], cex = 0.5)
+```
+
+##Para p12 = -0.95
+```{r grafico3, fig.height=7, fig.width=7}
+dados <- rmvnorm(10000, mean=rep(0,2), sigma=matrix(c(1.0, -0.95,
+                                                      -0.95, 1.0), nrow = 2, byrow = TRUE))
+plot(dados[,1] ~ dados[,2], cex = 0.5)
+```
+
